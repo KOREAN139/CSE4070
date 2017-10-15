@@ -333,8 +333,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
 
   /* Contruct ESP here. */
-  *esp = PHYS_BASE;
-
   /* Put arguments in stack.
      After put words in stack, substitute element as addr. of word */
   for(i = argc; i--; args[i] = *esp){
