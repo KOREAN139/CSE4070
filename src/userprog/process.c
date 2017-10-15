@@ -230,7 +230,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* To store arguments.
 	 Since there are limit of 128bytes on command-line that pintos can
 	 pass to the kernel, num. arguments is at most 64. */
-  char *args[64] = {};
+  char *args[64];
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
