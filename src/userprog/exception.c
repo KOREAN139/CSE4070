@@ -148,6 +148,17 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  /* When page fault occurs in kernel. 
+     ( To use get_user in syscall.c ) */
+  if(!user){
+	/* Copies eax value into eip. */
+	f->eip = (void (*)(void))f->eax;
+	/* Sets eax to 0xffffffff. */
+	f->eax = 0xffffffff;
+	return;
+  }
+  thread_exit();
+
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */

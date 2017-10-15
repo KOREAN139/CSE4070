@@ -7,20 +7,31 @@
 #include "threads/init.h"
 
 static void syscall_handler (struct intr_frame *);
-void syscall_halt (void);
-void syscall_exit (int status);
-pid_t syscall_exec (const char *cmd_line);
-int syscall_wait (pid_t pid);
-bool syscall_create (const char *file, unsigned initial_size);
-bool syscall_remove (const char *file);
-int syscall_open (const char *file);
-int syscall_filesize (int fd);
-int syscall_read (int fd, const void *buffer, unsigned size);
-void syscall_seek (int fd, unsigned position);
-unsigned syscall_tell (int fd);
-void syscall_close (int fd);
-int syscall_fib (int n);
-int syscall_sumFour (int a, int b, int c, int d);
+
+/* Reads a byte at user virtual address UADDR.
+   UADDR must be below PHYS_BASE.
+   Returns the byte value if successful, -1 if a segfault
+   occurred. */
+static int
+get_user (const uint8_t *uaddr)
+{
+  int result;
+  asm ("movl $1f, %0; movzbl %1, %0; 1:"
+       : "=&a" (result) : "m" (*uaddr));
+  return result;
+}
+ 
+/* Writes BYTE to user address UDST.
+   UDST must be below PHYS_BASE.
+   Returns true if successful, false if a segfault occurred. */
+static bool
+put_user (uint8_t *udst, uint8_t byte)
+{
+  int error_code;
+  asm ("movl $1f, %0; movb %b2, %1; 1:"
+       : "=&a" (error_code), "=m" (*udst) : "q" (byte));
+  return error_code != -1;
+}
 
 void
 syscall_init (void) 
