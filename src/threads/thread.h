@@ -24,6 +24,14 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/* File. */
+struct fileEntry
+  {
+	int fd;
+	struct file *file;
+	struct list_elem link;
+  };
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -97,6 +105,12 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
+
+	/* Added for project 1. */
+    struct thread *parent;                   /* Parent. */
+	
+	struct list childList;
+	struct list_elem childElem;             /* Children. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
