@@ -229,7 +229,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   
   /* To store arguments.
 	 Since there are limit of 128bytes on command-line that pintos can
-	 pass to the kernel, num. arguments is at most 64. */
+	 pass to the kernel, num. of arguments is at most 64. */
   char *args[64];
 
   /* Allocate and activate page directory. */
@@ -241,7 +241,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Parse arguments here. */
   /* Copy given filename to use function strtok_r. */
   fn_copy = palloc_get_page(0);
-  ASSERT(fn_copy);
+  if(!fn_copy)
+	goto done;
   strlcpy(fn_copy, file_name, PGSIZE);
 
   /* Store pointers that points each argument.
