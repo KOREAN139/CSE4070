@@ -23,7 +23,8 @@ bool syscall_create (const char *file, unsigned initial_size);
 bool syscall_remove (const char *file);
 int syscall_open (const char *file);
 int syscall_filesize (int fd);
-int syscall_read (int fd, const void *buffer, unsigned size);
+int syscall_read (int fd, void *buffer, unsigned size);
+int syscall_write (int fd, const void *buffer, unsigned size)
 void syscall_seek (int fd, unsigned position);
 unsigned syscall_tell (int fd);
 void syscall_tell (int fd);
@@ -123,7 +124,7 @@ isVargs (struct intr_frame *f, int n)
   bool valid = true;
   void *ptr = NULL;
   while (n--){
-	ptr = *((void *)f->esp + 4*n);
+	ptr = ((void *)f->esp + 4 * (n + 1));
 	if(!is_user_vaddr(ptr)) valid = false;
   }
   return valid;
@@ -151,7 +152,12 @@ syscall_filesize (int fd)
 }
 
 int
-syscall_read (int fd, const void *buffer, unsigned size)
+syscall_read (int fd, void *buffer, unsigned size)
+{
+}
+
+int
+syscall_write (int fd, const void *buffer, unsigned size)
 {
 }
 
