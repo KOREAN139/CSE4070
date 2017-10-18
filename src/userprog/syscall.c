@@ -121,13 +121,13 @@ syscall_sumFour (int a, int b, int c, int d)
 bool
 isVargs (struct intr_frame *f, int n)
 {
-  bool valid = true;
   void *ptr = NULL;
   while (n--){
+	/* 4 for sizeof(uintptr_t). */
 	ptr = ((void *)f->esp + 4 * (n + 1));
-	if(!is_user_vaddr(ptr)) valid = false;
+	if(!is_user_vaddr(ptr)) return false;
   }
-  return valid;
+  return true;
 }
 
 /* Project 2 (maybe). */
