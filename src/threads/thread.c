@@ -295,7 +295,7 @@ thread_exit (void)
   ASSERT (!intr_context ());
 
 #ifdef USERPROG
-  process_exit (status);
+  process_exit ();
 #endif
 
   /* Remove thread from all threads list, set our status to dying,
@@ -477,6 +477,11 @@ init_thread (struct thread *t, const char *name, int priority)
 
   /* Initialize thread's child list. */
   list_init (&t->childList);
+
+  /* Initialize thread's semaphores. */
+  sema_init(&t->wait, 0);
+  sema_init(&t->load, 0);
+  sema_init(&t->exec, 0);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

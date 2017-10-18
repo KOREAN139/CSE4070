@@ -1,3 +1,4 @@
+#include "userprog/process.h"
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
@@ -5,7 +6,12 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/init.h"
+#include "threads/synch.h"
+#include "threads/vaddr.h"
 #include "filesys/filesys.h"
+
+/* Get pointer that stores IDX-th argument's addr in INTFRM. */
+#define GET_ARGPTR(INTFRM, IDX) ((void *)((uintptr_t)(INTFRM)->esp + 4 * (IDX)))
 
 static void syscall_handler (struct intr_frame *);
 
@@ -16,7 +22,7 @@ pid_t syscall_exec (const char *cmd_line);
 int syscall_wait (pid_t pid);
 int syscall_fib (int n);
 int syscall_sumFour (int a, int b, int c, int d);
-int isVargs (struct intr_frame *f, int n);
+bool isVargs (struct intr_frame *f, int n);
 
 /* Project 2 (maybe). */
 bool syscall_create (const char *file, unsigned initial_size);
@@ -24,10 +30,10 @@ bool syscall_remove (const char *file);
 int syscall_open (const char *file);
 int syscall_filesize (int fd);
 int syscall_read (int fd, void *buffer, unsigned size);
-int syscall_write (int fd, const void *buffer, unsigned size)
+int syscall_write (int fd, const void *buffer, unsigned size);
 void syscall_seek (int fd, unsigned position);
 unsigned syscall_tell (int fd);
-void syscall_tell (int fd);
+void syscall_close (int fd);
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
@@ -66,11 +72,46 @@ syscall_handler (struct intr_frame *f UNUSED)
   /* Get system call number. */ 
   int sysnum = *(int *)f->esp;
 
-  printf ("system call!\n");
-  printf ("%d - esp\n", sysnum);
+//  printf ("system call!\n");
+//  printf ("%d - esp\n", sysnum);
 
-  thread_exit ();
   /* Do syscall here. */
+  switch(sysnum) {
+	case SYS_HALT:
+	  syscall_halt();
+	  break;
+
+	case SYS_EXIT:
+	  if(!isVargs(f, 1)) syscall_exit(-1);
+	  syscall_exit(*(int *)GET_ARGPTR(f, 1));
+	  break;
+
+	case SYS_EXEC:
+	  if(!isVargs(f, 1)) syscall_exit(-1);
+	  f->eax = syscall_exec(*(char **)GET_ARGPTR(f, 1));
+	  break;
+
+	case SYS_WAIT:
+	  if(!isVargs(f, 1)) syscall_exit(-1);
+	  f->eax = syscall_wait(*(pid_t *)GET_ARGPTR(f, 1));
+	  break;
+
+	case SYS_FIB:
+	  if(!isVargs(f, 1)) syscall_exit(-1);
+	  f->eax = syscall_fib(*(int *)GET_ARGPTR(f, 1));
+	  break;
+
+	case SYS_SUMFOUR:
+	  if(!isVargs(f, 4)) syscall_exit(-1);
+	  f->eax = syscall_sumFour(
+		  *(int *)GET_ARGPTR(f, 1), *(int *)GET_ARGPTR(f, 2),
+		  *(int *)GET_ARGPTR(f, 3), *(int *)GET_ARGPTR(f, 4));
+	  break;
+
+	/* When given sysnum is not valid. */
+	default: 
+	  syscall_exit(-1);
+  }
 }
 
 /* Proejct 1. */
@@ -85,8 +126,23 @@ syscall_exit (int status)
 {
   /* Need to implement lock or semaphore. */
   struct thread *cur = thread_current();
+  struct thread *parent = cur->parent;
+  struct list_elem *e;
+
+  /* Print the process's name and exit code. */
+  printf("%s: exit(%d)\n", cur->name, status);
+
+  /* Find current thread in parent's child list,
+	 and remove itself. */
+  for(e = list_begin(&parent->childList); e != list_end(&parent->childList) 
+	  && (list_entry(e, struct thread, childElem)->tid) != cur->tid;
+	  e = list_next(e));
+  list_remove(e);
+
+  /* Ready for being terminated. */
+  sema_up(&parent->wait);
+
   thread_exit();
-  return;
 }
 
 pid_t

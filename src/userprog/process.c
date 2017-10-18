@@ -15,6 +15,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
@@ -29,7 +30,7 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy, *svptr;
-  tid_t tid;
+  tid_t tid, childtid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -40,10 +41,21 @@ process_execute (const char *file_name)
 
   file_name = strtok_r(file_name, " ", &svptr);
 
+  /* Wait for child thread being loaded. */
+  sema_down(&thread_current()->load);
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+
+  /* Get thread id. */
+  childtid = list_entry(list_rbegin(&thread_current()->childList), struct thread, childElem)->tid;
+
+  /* When laod failed. */
+  if (tid == TID_ERROR || tid != childtid){
+	tid  = TID_ERROR;
     palloc_free_page (fn_copy); 
+  }
+
   return tid;
 }
 
@@ -62,14 +74,20 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   
-  puts("\n *** process starts *** \n");
-
   success = load (file_name, &if_.eip, &if_.esp);
+
+  /* Load operation ends, no matter what load() returns. */
+  sema_up(&thread_current()->parent->load);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success){
+	list_remove(&thread_current()->childElem);
     thread_exit ();
+  }
+
+  /* Good to be executed. */
+  sema_down(&thread_current()->exec);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
