@@ -184,6 +184,10 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  /* Add this thread to curr thread's children list. */
+  list_push_back(&thread_current()->childList, &t->childElem);
+  t->parent = thread_current();
+
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
@@ -286,7 +290,7 @@ thread_tid (void)
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
 void
-thread_exit (int status) 
+thread_exit (void) 
 {
   ASSERT (!intr_context ());
 
@@ -470,6 +474,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  /* Initialize thread's child list. */
+  list_init (&t->childList);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

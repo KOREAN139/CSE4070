@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -107,10 +108,20 @@ struct thread
 #endif
 
 	/* Added for project 1. */
-    struct thread *parent;                   /* Parent. */
+    struct thread *parent;              /* Parent. */
 	
 	struct list childList;
-	struct list_elem childElem;             /* Children. */
+	struct list_elem childElem;         /* Children. */
+
+	/* up : When thread is ready for being terminated.
+	   down : Prepare for terminating itself. */
+	struct semaphore wait;
+	/* up : When load operation ends.
+	   down : Wait for being loaded. */
+	struct semaphore load;
+	/* up : Good to be terminated.
+	   down : After being loaded, wait for being excuted. */
+	struct semaphore exec;              /* For synchronization. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -137,7 +148,7 @@ struct thread *thread_current (void);
 tid_t thread_tid (void);
 const char *thread_name (void);
 
-void thread_exit (int status) NO_RETURN;
+void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
