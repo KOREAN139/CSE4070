@@ -98,6 +98,16 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+  /* Set up part of thread structure for the running thread,
+	 which added by Sanggu. */
+#ifdef USERPROG
+  list_init(&initial_thread->childList);
+  initial_thread->parent = NULL;
+  sema_init(&initial_thread->wait, 0);
+  sema_init(&initial_thread->load, 0);
+  sema_init(&initial_thread->exec, 0);
+#endif
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -474,6 +484,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
+
+  /* Set thread's parent. */
+  t->parent = thread_current();
 
   /* Initialize thread's child list. */
   list_init (&t->childList);

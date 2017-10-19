@@ -105,10 +105,11 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-#endif
 
 	/* Added for project 1. */
-    struct thread *parent;              /* Parent. */
+    int exit_status;                    /* Stores exit status. */
+
+	struct thread *parent;              /* Parent. */
 	
 	struct list childList;
 	struct list_elem childElem;         /* Children. */
@@ -122,6 +123,7 @@ struct thread
 	/* up : Good to be terminated.
 	   down : After being loaded, wait for being excuted. */
 	struct semaphore exec;              /* For synchronization. */
+#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

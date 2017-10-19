@@ -10,9 +10,6 @@
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
 
-/* Get pointer that stores IDX-th argument's addr in INTFRM. */
-#define GET_ARGPTR(INTFRM, IDX) ((void *)((uintptr_t)(INTFRM)->esp + 4 * (IDX)))
-
 static void syscall_handler (struct intr_frame *);
 
 /* Project 1. */
@@ -23,6 +20,7 @@ int syscall_wait (pid_t pid);
 int syscall_fib (int n);
 int syscall_sumFour (int a, int b, int c, int d);
 bool isVargs (struct intr_frame *f, int n);
+uint32_t readWord (const void *ptr);
 
 /* Project 2 (maybe). */
 bool syscall_create (const char *file, unsigned initial_size);
@@ -70,7 +68,7 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
   /* Get system call number. */ 
-  int sysnum = *(int *)f->esp;
+  int sysnum = (int)readWord((const void *)f->esp);
 
 //  printf ("system call!\n");
 //  printf ("%d - esp\n", sysnum);
@@ -82,30 +80,28 @@ syscall_handler (struct intr_frame *f UNUSED)
 	  break;
 
 	case SYS_EXIT:
-	  if(!isVargs(f, 1)) syscall_exit(-1);
-	  syscall_exit(*(int *)GET_ARGPTR(f, 1));
+	  syscall_exit((int)readWord((const void *)(f->esp + 4)));
 	  break;
 
 	case SYS_EXEC:
-	  if(!isVargs(f, 1)) syscall_exit(-1);
-	  f->eax = syscall_exec(*(char **)GET_ARGPTR(f, 1));
+	  f->eax = syscall_exec((char *)readWord((const void *)(f->esp + 4)));
 	  break;
 
 	case SYS_WAIT:
-	  if(!isVargs(f, 1)) syscall_exit(-1);
-	  f->eax = syscall_wait(*(pid_t *)GET_ARGPTR(f, 1));
+	  f->eax = syscall_wait((pid_t)readWord((const void *)(f->esp + 4)));
 	  break;
 
 	case SYS_FIB:
-	  if(!isVargs(f, 1)) syscall_exit(-1);
-	  f->eax = syscall_fib(*(int *)GET_ARGPTR(f, 1));
+	  f->eax = syscall_fib((int)readWord((const void *)(f->esp + 4)));
 	  break;
 
 	case SYS_SUMFOUR:
-	  if(!isVargs(f, 4)) syscall_exit(-1);
 	  f->eax = syscall_sumFour(
-		  *(int *)GET_ARGPTR(f, 1), *(int *)GET_ARGPTR(f, 2),
-		  *(int *)GET_ARGPTR(f, 3), *(int *)GET_ARGPTR(f, 4));
+		  (int)readWord((const void *)(f->esp + 4)),
+		  (int)readWord((const void *)(f->esp + 8)),
+		  (int)readWord((const void *)(f->esp + 12)), 
+		  (int)readWord((const void *)(f->esp + 16))
+		  );
 	  break;
 
 	/* When given sysnum is not valid. */
@@ -171,19 +167,19 @@ syscall_sumFour (int a, int b, int c, int d)
   return a + b + c + d;
 }
 
-/* Checks whether given arguments are valid or not.
-   Returns true if given n-arguments are valid,
-   false if any of given n-arguments is invalid. */
-bool
-isVargs (struct intr_frame *f, int n)
+/* Read one word (4byte) from given ptr.
+   Checks that ptr is below PHYS_BASE,
+   and read a word using get_user. */
+uint32_t
+readWord (const void *ptr)
 {
-  void *ptr = NULL;
-  while (n--){
-	/* 4 for sizeof(uintptr_t). */
-	ptr = ((void *)f->esp + 4 * (n + 1));
-	if(!is_user_vaddr(ptr)) return false;
+  int i, t, ret = 0;
+  if(!is_user_vaddr(ptr)) syscall_exit(-1);
+  for(i = 0; i < 4; i++){
+	if((t = get_user(ptr + i) == -1)) syscall_exit(-1);
+	ret |= t << (8 * i);
   }
-  return true;
+  return ret;
 }
 
 /* Project 2 (maybe). */
