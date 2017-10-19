@@ -104,6 +104,21 @@ syscall_handler (struct intr_frame *f UNUSED)
 		  );
 	  break;
 
+	case SYS_READ:
+      f->eax = syscall_read(
+		  (int)readWord((const void *)(f->esp + 4)),
+		  (void *)readWord((const void *)(f->esp + 8)),
+		  (unsigned)readWord((const void *)(f->esp + 12))
+		  );
+	  break;
+	
+	case SYS_WRITE:
+      f->eax = syscall_write(
+		  (int)readWord((const void *)(f->esp + 4)),
+		  (const void *)readWord((const void *)(f->esp + 8)),
+		  (unsigned)readWord((const void *)(f->esp + 12))
+		  );
+	  break;
 	/* When given sysnum is not valid. */
 	default: 
 	  syscall_exit(-1);
@@ -125,6 +140,8 @@ syscall_exit (int status)
   struct thread *parent = cur->parent;
   struct list_elem *e;
 
+  parent->exit_status = status;
+
   /* Print the process's name and exit code. */
   printf("%s: exit(%d)\n", cur->name, status);
 
@@ -136,7 +153,7 @@ syscall_exit (int status)
   list_remove(e);
 
   /* Ready for being terminated. */
-  sema_up(&parent->wait);
+  // sema_up(&parent->wait);
 
   thread_exit();
 }
@@ -169,14 +186,16 @@ syscall_sumFour (int a, int b, int c, int d)
 
 /* Read one word (4byte) from given ptr.
    Checks that ptr is below PHYS_BASE,
-   and read a word using get_user. */
+   and read a word using get_user.
+   If given ptr is not on below PHYS_BASE or 
+   segfalut occured while reading word, call syscall_exit(-1). */
 uint32_t
 readWord (const void *ptr)
 {
   int i, t, ret = 0;
   if(!is_user_vaddr(ptr)) syscall_exit(-1);
   for(i = 0; i < 4; i++){
-	if((t = get_user(ptr + i) == -1)) syscall_exit(-1);
+	if((t = get_user((const uint8_t *)(ptr + i)) == -1)) syscall_exit(-1);
 	ret |= t << (8 * i);
   }
   return ret;
@@ -206,11 +225,26 @@ syscall_filesize (int fd)
 int
 syscall_read (int fd, void *buffer, unsigned size)
 {
+  /* For project 1, stdin. */
+  if(fd == 0){
+	int cnt = 0;
+	uint8_t c;
+	while(cnt < size && (c = input_getc()) != '\n')
+	  /* If segfault occurs, call syscall_exit(). */
+	  if(!put_user((uint8_t *)(buffer + cnt++), c))
+		syscall_exit(-1);
+	return cnt;
+  }
 }
 
 int
 syscall_write (int fd, const void *buffer, unsigned size)
 {
+  /* For project 1, stdout. */
+  if(fd == 1){
+    putbuf((const char *)buffer, (size_t)size);
+	return size;
+  }
 }
 
 void

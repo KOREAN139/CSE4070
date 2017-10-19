@@ -41,14 +41,17 @@ process_execute (const char *file_name)
 
   file_name = strtok_r(file_name, " ", &svptr);
 
-  /* Wait for child thread being loaded. */
-  sema_down(&thread_current()->load);
-
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
 
+  /* Wait for child thread being loaded. */
+  // sema_down(&thread_current()->load);
+
   /* Get thread id. */
-  childtid = list_entry(list_rbegin(&thread_current()->childList), struct thread, childElem)->tid;
+  childtid = list_entry(
+	  list_rbegin(&thread_current()->childList),
+	  struct thread, childElem
+	  )->tid;
 
   /* When laod failed. */
   if (tid == TID_ERROR || tid != childtid){
@@ -77,7 +80,7 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* Load operation ends, no matter what load() returns. */
-  sema_up(&thread_current()->parent->load);
+  // sema_up(&thread_current()->parent->load);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -87,7 +90,7 @@ start_process (void *file_name_)
   }
 
   /* Good to be executed. */
-  sema_down(&thread_current()->exec);
+  // sema_down(&thread_current()->exec);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -122,13 +125,10 @@ process_wait (tid_t child_tid)
 
   if(e == list_end(&cur->childList)) return -1;
 
-  exit_status = t->exit_status;
+  // sema_up(&t->exec);
+  // sema_down(&cur->wait);
 
-  sema_down(&t->wait);
-  list_remove(&t->childElem);
-  free(t);
-
-  return exit_status;
+  return cur->exit_status;
 }
 
 /* Free the current process's resources. */
