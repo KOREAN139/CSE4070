@@ -485,9 +485,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 
-  /* Set thread's parent. */
-  // t->parent = thread_current();
-
   /* Initialize thread's child list. */
   list_init (&t->childList);
 

@@ -70,8 +70,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   /* Get system call number. */ 
   int sysnum = (int)readWord((const void *)f->esp);
 
-//  printf ("system call!\n");
-//  printf ("%d - esp\n", sysnum);
+  //printf ("system call!\n");
+  //printf ("%d - esp\n", sysnum);
 
   /* Do syscall here. */
   switch(sysnum) {
@@ -152,8 +152,9 @@ syscall_exit (int status)
 	  e = list_next(e));
   list_remove(e);
 
+  //puts("[syscall_exit] sema_up parent wait");
   /* Ready for being terminated. */
-  // sema_up(&parent->wait);
+  sema_up(&parent->wait);
 
   thread_exit();
 }
@@ -161,6 +162,7 @@ syscall_exit (int status)
 pid_t
 syscall_exec (const char *cmd_line)
 {
+  readWord((const void *)cmd_line);
   return (pid_t) process_execute (cmd_line);
 }
 
@@ -195,8 +197,8 @@ readWord (const void *ptr)
   int i, t, ret = 0;
   if(!is_user_vaddr(ptr)) syscall_exit(-1);
   for(i = 0; i < 4; i++){
-	if((t = get_user((const uint8_t *)(ptr + i)) == -1)) syscall_exit(-1);
-	ret |= t << (8 * i);
+	if((t = get_user((const uint8_t *)(ptr + i))) == -1) syscall_exit(-1);
+	ret |= (t << (8 * i));
   }
   return ret;
 }
@@ -231,7 +233,7 @@ syscall_read (int fd, void *buffer, unsigned size)
 	uint8_t c;
 	while(cnt < size && (c = input_getc()) != '\n')
 	  /* If segfault occurs, call syscall_exit(). */
-	  if(!put_user((uint8_t *)(buffer + cnt++), c))
+	  if(!put_user((const uint8_t *)(buffer + cnt++), c))
 		syscall_exit(-1);
 	return cnt;
   }
