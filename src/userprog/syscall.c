@@ -70,9 +70,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   /* Get system call number. */ 
   int sysnum = (int)readWord((const void *)f->esp);
 
-  //printf ("system call!\n");
-  //printf ("%d - esp\n", sysnum);
-
   /* Do syscall here. */
   switch(sysnum) {
 	case SYS_HALT:
@@ -152,7 +149,6 @@ syscall_exit (int status)
 	  e = list_next(e));
   list_remove(e);
 
-  //puts("[syscall_exit] sema_up parent wait");
   /* Ready for being terminated. */
   sema_up(&parent->wait);
 

@@ -29,7 +29,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy, *svptr;
+  char *fn_copy, *svptr, *fname;
   tid_t tid, childtid;
 
   /* Make a copy of FILE_NAME.
@@ -39,15 +39,20 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  file_name = strtok_r(file_name, " ", &svptr);
+  fname = palloc_get_page(0);
+  if(fname == NULL)
+	return TID_ERROR;
+  strlcpy (fname, file_name, PGSIZE);
+
+  fname = strtok_r (fname, " ", &svptr);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (fname, PRI_DEFAULT, start_process, fn_copy);
 
-  //printf(" '%s' waits sema_up(load)\n ", file_name); // zzzzz
+  palloc_free_page (fname);
+
   /* Wait for child thread being loaded. */
   sema_down(&thread_current()->load);
-  //printf(" '%s' gets in!\n ", file_name); // zzzzz
 
   /* When laod failed. */
   if (tid == TID_ERROR)
@@ -82,7 +87,6 @@ start_process (void *file_name_)
   
   success = load (file_name, &if_.eip, &if_.esp);
 
-  //puts("[start_process] sema_up parent load");
   /* Load operation ends, no matter what load() returns. */
   sema_up(&thread_current()->parent->load);
 
@@ -93,10 +97,8 @@ start_process (void *file_name_)
     thread_exit ();
   }
 
-  //puts("[start_process] sema_down exec");
   /* Good to be executed. */
   sema_down(&thread_current()->exec);
-  //puts("[start_process] after sema_down exec, get in");
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -131,11 +133,8 @@ process_wait (tid_t child_tid)
 
   if(e == list_end(&cur->childList)) return -1;
 
-  //puts("[process_wait] sema_up exec");
   sema_up(&t->exec);
-  //puts("[process_wait] sema_down parent wait");
   sema_down(&cur->wait);
-  //puts("[process_Wait] after, sema_down parent wait, get in");
 
   return cur->exit_status;
 }
