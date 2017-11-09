@@ -7,6 +7,7 @@
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/switch.h"
 #include "threads/synch.h"
@@ -219,6 +220,17 @@ thread_create (const char *name, int priority,
   /* Add this thread to curr thread's children list. */
   list_push_back(&thread_current()->childList, &t->childElem);
   t->parent = thread_current();
+
+  /* Allocate file descriptor table. */
+  t->fdTable = malloc(sizeof(uint32_t) * 128);
+  if(!t->fdTable){
+	free(t->fdTable);
+	return TID_ERROR;
+  }
+
+  /* Initialize thread's fd. 
+     Since 0, 1 are reserved, it starts with 2. */
+  t->fd = 2;
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -492,6 +504,9 @@ init_thread (struct thread *t, const char *name, int priority)
   sema_init(&t->wait, 0);
   sema_init(&t->load, 0);
   sema_init(&t->exec, 0);
+
+  /* Initialize thread's file. */
+  t->curFile = NULL;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

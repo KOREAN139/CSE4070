@@ -125,6 +125,16 @@ struct thread
 	struct semaphore exec;              /* For synchronization. */
 #endif
 
+	/* Added for project 2. */
+	
+	int fd;                             /* Stores fd, 
+										   next file will get fd+1 for fd. */
+
+	struct file **fdTable;              /* File descriptor table. */
+
+	struct file *curFile;               /* For denying write on file which
+										   this thread opens. */
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };

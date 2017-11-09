@@ -155,8 +155,11 @@ page_fault (struct intr_frame *f)
 	f->eip = (void (*)(void))f->eax;
 	/* Sets eax to 0xffffffff. */
 	f->eax = 0xffffffff;
-	return;
+	//return;
   }
+
+  syscall_exit(-1);
+
   thread_exit();
 
   /* To implement virtual memory, delete the rest of the function

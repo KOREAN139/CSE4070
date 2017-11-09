@@ -6,13 +6,15 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/init.h"
+#include "threads/malloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "filesys/filesys.h"
+#include "filesys/file.h"
 
 static void syscall_handler (struct intr_frame *);
 
-/* Project 1. */
+/* Project 1(+ read, write for stdbuff). */
 void syscall_halt (void);
 void syscall_exit (int status);
 pid_t syscall_exec (const char *cmd_line);
@@ -22,7 +24,7 @@ int syscall_sumFour (int a, int b, int c, int d);
 bool isVargs (struct intr_frame *f, int n);
 uint32_t readWord (const void *ptr);
 
-/* Project 2 (maybe). */
+/* Project 2. */
 bool syscall_create (const char *file, unsigned initial_size);
 bool syscall_remove (const char *file);
 int syscall_open (const char *file);
@@ -32,6 +34,7 @@ int syscall_write (int fd, const void *buffer, unsigned size);
 void syscall_seek (int fd, unsigned position);
 unsigned syscall_tell (int fd);
 void syscall_close (int fd);
+struct lock fLock;
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
@@ -62,6 +65,8 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+
+  lock_init(&fLock);
 }
 
 static void
@@ -72,6 +77,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   /* Do syscall here. */
   switch(sysnum) {
+	/* Project 1. */
 	case SYS_HALT:
 	  syscall_halt();
 	  break;
@@ -116,6 +122,48 @@ syscall_handler (struct intr_frame *f UNUSED)
 		  (unsigned)readWord((const void *)(f->esp + 12))
 		  );
 	  break;
+
+	/* Project 2. */
+	case SYS_CREATE:
+	  f->eax = syscall_create(
+		  (char *)readWord((const void *)(f->esp + 4)),
+		  (unsigned)readWord((const void *)(f->esp + 8))
+		  );
+	  break;
+
+	case SYS_REMOVE:
+	  f->eax = syscall_remove((char *)readWord((const void*)(f->esp + 4)));
+	  break;
+
+	case SYS_OPEN:
+	  f->eax = syscall_open(
+		  (char *)readWord((const void*)(f->esp + 4))
+		  );
+	  break;
+
+	case SYS_FILESIZE:
+	  f->eax = syscall_filesize(
+		  (int)readWord((const void *)(f->esp + 4))
+		  );
+	  break;
+
+	case SYS_SEEK:
+	  syscall_seek(
+		  (int)readWord((const void *)(f->esp + 4)),
+		  (unsigned)readWord((const void *)(f->esp + 8))
+		  );
+	  break;
+
+	case SYS_TELL:
+	  f->eax = syscall_tell(
+		  (int)readWord((const void *)(f->esp + 4))
+		  );
+	  break;
+
+	case SYS_CLOSE:
+	  syscall_close((int)readWord((const void *)(f->esp + 4)));
+	  break;
+
 	/* When given sysnum is not valid. */
 	default: 
 	  syscall_exit(-1);
@@ -132,7 +180,6 @@ syscall_halt (void)
 void
 syscall_exit (int status)
 {
-  /* Need to implement lock or semaphore. */
   struct thread *cur = thread_current();
   struct thread *parent = cur->parent;
   struct list_elem *e;
@@ -148,6 +195,12 @@ syscall_exit (int status)
 	  && (list_entry(e, struct thread, childElem)->tid) != cur->tid;
 	  e = list_next(e));
   list_remove(e);
+
+  /* Clean up file descriptor table, and deallocates it. */
+  while(--cur->fd > 1) file_close(cur->fdTable[cur->fd]);
+  free(cur->fdTable);
+
+  // if(cur->curFile) file_close (cur->curFile);
 
   /* Ready for being terminated. */
   sema_up(&parent->wait);
@@ -199,30 +252,60 @@ readWord (const void *ptr)
   return ret;
 }
 
-/* Project 2 (maybe). */
+/* Project 2. */
 bool
 syscall_create (const char *file, unsigned initial_size)
 {
+  /* Check for bad-ptr. */
+  readWord((const void *)file);
+  return filesys_create(file, initial_size);
 }
 
 bool
 syscall_remove (const char *file)
 {
+  /* Check for bad-ptr. */
+  readWord((const void *)file);
+  // if(!*file) syscall_exit(-1);
+  return filesys_remove(file);
 }
 
 int
 syscall_open (const char *file)
 {
+  /* Check for bad-ptr. */
+  readWord((const void *)file);
+
+  struct thread *cur;
+  /* Open file with given name. */
+  struct file *f = filesys_open(file);
+
+  /* When such file doesn't exist. */
+  if( !f ) return -1;
+
+  /* Write on file descriptor table and returns that fd.
+	 (postfix for fd to store file descriptor for next file) */
+  cur = thread_current();
+  cur->fdTable[cur->fd] = f;
+  return cur->fd++;
 }
 
 int
 syscall_filesize (int fd)
 {
+  struct thread *cur = thread_current();
+  /* Check for bad file descriptor. */
+  if(fd < 2 || cur->fd <= fd) syscall_exit(-1);
+
+  return file_length(cur->fdTable[fd]);
 }
 
 int
 syscall_read (int fd, void *buffer, unsigned size)
 {
+  /* Check for bad-ptr. */
+  readWord(buffer);
+  
   /* For project 1, stdin. */
   if(fd == 0){
 	int cnt = 0;
@@ -232,30 +315,65 @@ syscall_read (int fd, void *buffer, unsigned size)
 	  if(!put_user((const uint8_t *)(buffer + cnt++), c))
 		syscall_exit(-1);
 	return cnt;
+  } 
+  /* For project 2, read from files. */
+  else{
+	struct thread *cur = thread_current();
+	/* Check for bad file descriptor. */
+	if(fd < 2 || cur->fd <= fd || !(cur->fdTable[fd])) return -1;
+
+	return (int)file_read(cur->fdTable[fd], buffer, size);
   }
 }
 
 int
 syscall_write (int fd, const void *buffer, unsigned size)
 {
+  /* Check for bad-ptr. */
+  readWord(buffer);
+
   /* For project 1, stdout. */
   if(fd == 1){
     putbuf((const char *)buffer, (size_t)size);
 	return size;
+  }
+  /* For project 2, write to files. */
+  else{
+	struct thread *cur = thread_current();
+	/* Check for bad file descriptor. */
+	if(fd < 2 || cur->fd <= fd || !(cur->fdTable[fd])) return -1;
+
+	return (int)file_write(cur->fdTable[fd], buffer, size);
   }
 }
 
 void
 syscall_seek (int fd, unsigned position)
 {
+  struct thread *cur = thread_current();
+  /* Check for bad file descriptor. */
+  if(fd < 2 || cur->fd <= fd) return;
+
+  file_seek(cur->fdTable[fd], position);
 }
 
 unsigned
 syscall_tell (int fd)
 {
+  struct thread *cur = thread_current();
+  /* Check for bad file descriptor. */
+  if(fd < 2 || cur->fd <= fd) return -1;
+
+  return (unsigned)file_tell(cur->fdTable[fd]);
 }
 
 void
 syscall_close (int fd)
 {
+  struct thread *cur = thread_current();
+  /* Check for bad file descriptor. */
+  if(fd < 2 || cur->fd <= fd) syscall_exit(-1);
+
+  file_close(cur->fdTable[fd]);
+  cur->fdTable[fd] = NULL;
 }

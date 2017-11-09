@@ -298,6 +298,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+  // t->curFile = file;
+  // file_deny_write(file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -396,7 +398,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   *esp -= 8;
 
   /* Deallocates. */
-  palloc_free_page(fn_copy);
+  // palloc_free_page(fn_copy);
 
   // hex_dump((uintptr_t)*esp, *esp, (int)(PHYS_BASE - *esp), true);
 
@@ -407,6 +409,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
+
+  /* Deallocates. */
+  if(fn_copy) palloc_free_page(fn_copy);
+  
   file_close (file);
   return success;
 }
