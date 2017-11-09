@@ -33,6 +33,9 @@ struct fileEntry
 	struct list_elem link;
   };
 
+/* Project 2, lock for synchronization. */
+struct lock fLock;
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The

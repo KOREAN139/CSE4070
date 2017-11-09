@@ -292,14 +292,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   for(str = fn_copy; args[++argc] = strtok_r(str, " ", &svptr); str = NULL);
 
   /* Open executable file. */
+  lock_acquire(&fLock);
   file = filesys_open (*args);
+  lock_release(&fLock);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-  // t->curFile = file;
-  // file_deny_write(file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -412,8 +412,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Deallocates. */
   if(fn_copy) palloc_free_page(fn_copy);
+
+  if(success){
+	t->curFile = file;
+	file_deny_write(file);
+  }
   
-  file_close (file);
   return success;
 }
 

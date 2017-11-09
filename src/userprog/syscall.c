@@ -34,7 +34,6 @@ int syscall_write (int fd, const void *buffer, unsigned size);
 void syscall_seek (int fd, unsigned position);
 unsigned syscall_tell (int fd);
 void syscall_close (int fd);
-struct lock fLock;
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
@@ -65,8 +64,6 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-
-  lock_init(&fLock);
 }
 
 static void
@@ -200,7 +197,7 @@ syscall_exit (int status)
   while(--cur->fd > 1) file_close(cur->fdTable[cur->fd]);
   free(cur->fdTable);
 
-  // if(cur->curFile) file_close (cur->curFile);
+  file_close (cur->curFile);
 
   /* Ready for being terminated. */
   sema_up(&parent->wait);
@@ -277,8 +274,11 @@ syscall_open (const char *file)
   readWord((const void *)file);
 
   struct thread *cur;
+
   /* Open file with given name. */
+  lock_acquire(&fLock);
   struct file *f = filesys_open(file);
+  lock_release(&fLock);
 
   /* When such file doesn't exist. */
   if( !f ) return -1;
@@ -310,19 +310,23 @@ syscall_read (int fd, void *buffer, unsigned size)
   if(fd == 0){
 	int cnt = 0;
 	uint8_t c;
-	while(cnt < size && (c = input_getc()) != '\n')
+	while(cnt < size && (c = input_getc()) != '\n'){
 	  /* If segfault occurs, call syscall_exit(). */
-	  if(!put_user((const uint8_t *)(buffer + cnt++), c))
-		syscall_exit(-1);
+	  if(!put_user((const uint8_t *)(buffer + cnt++), c)) syscall_exit(-1);
+	}
 	return cnt;
   } 
   /* For project 2, read from files. */
   else{
+	int cnt;
 	struct thread *cur = thread_current();
 	/* Check for bad file descriptor. */
 	if(fd < 2 || cur->fd <= fd || !(cur->fdTable[fd])) return -1;
 
-	return (int)file_read(cur->fdTable[fd], buffer, size);
+	lock_acquire(&fLock);
+	cnt = (int)file_read(cur->fdTable[fd], buffer, size);
+	lock_release(&fLock);
+	return cnt;
   }
 }
 
@@ -331,7 +335,7 @@ syscall_write (int fd, const void *buffer, unsigned size)
 {
   /* Check for bad-ptr. */
   readWord(buffer);
-
+  
   /* For project 1, stdout. */
   if(fd == 1){
     putbuf((const char *)buffer, (size_t)size);
@@ -339,11 +343,15 @@ syscall_write (int fd, const void *buffer, unsigned size)
   }
   /* For project 2, write to files. */
   else{
+	int cnt;
 	struct thread *cur = thread_current();
 	/* Check for bad file descriptor. */
 	if(fd < 2 || cur->fd <= fd || !(cur->fdTable[fd])) return -1;
 
-	return (int)file_write(cur->fdTable[fd], buffer, size);
+	lock_acquire(&fLock);
+	cnt = (int)file_write(cur->fdTable[fd], buffer, size);
+	lock_release(&fLock);
+	return cnt;
   }
 }
 
