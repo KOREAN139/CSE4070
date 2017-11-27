@@ -269,6 +269,12 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* If current thread no longer has the highest
+	 priority, yields. */
+  if(priority_less_func(list_begin(&ready_list),
+		&thread_current()->elem, NULL))
+	thread_yield();
+  
   return tid;
 }
 
@@ -433,6 +439,12 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  
+  /* If current thread no longer has the highest
+	 priority, yields. */
+  if(priority_less_func(list_begin(&ready_list),
+		&thread_current()->elem, NULL))
+	thread_yield();
 }
 
 /* Returns the current thread's priority. */
