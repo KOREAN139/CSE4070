@@ -12,9 +12,8 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#ifdef USERPROG
+#include "devices/timer.h"
 #include "userprog/process.h"
-#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -24,6 +23,9 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+/* List of processes in THREAD_BLOCKED state.(Alarm clock) */
+static struct list sleep_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -54,6 +56,8 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+static int64_t wakeup_tick;     /* Closest tick that some threads
+								   in sleep_list need to wake up. */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -92,9 +96,13 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
+  list_init (&sleep_list);
   list_init (&all_list);
   /* Initialize lock for file system. */
   lock_init(&fLock);
+
+  /* Initialize wake up tick for alarm clock. */
+  wakeup_tick = INT64_MAX;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -104,13 +112,11 @@ thread_init (void)
 
   /* Set up part of thread structure for the running thread,
 	 which added by Sanggu. */
-#ifdef USERPROG
   list_init(&initial_thread->childList);
   initial_thread->parent = NULL;
   sema_init(&initial_thread->wait, 0);
   sema_init(&initial_thread->load, 0);
   sema_init(&initial_thread->exec, 0);
-#endif
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -136,6 +142,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  int64_t curr_t = timer_ticks();
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -150,6 +157,31 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+
+  /* Wake up blocked thread, if any thread need to be. */
+  if(curr_t >= wakeup_tick){
+
+	/* Initialize wakeup_tick to set new value through loop. */
+	wakeup_tick = INT64_MAX;
+
+	/* Loop through sleep list, and add to ready queue when
+	   thread's tick is less than curr_t. */ 
+	struct list_elem *e = list_begin(&sleep_list);
+	while(e != list_end(&sleep_list)){
+	  struct thread *cur = list_entry(e, struct thread, elem);
+
+	  if(cur->tick <= curr_t){
+		/* Remove from sleep list and add to ready queue. */
+		e = list_remove(e);
+		thread_unblock(cur);
+	  } else{
+		/* Update wakeup_tick if necessary. */
+		wakeup_tick = wakeup_tick > cur->tick ? cur->tick : wakeup_tick;
+		e = list_next(e);
+	  }
+
+	}
+  }
 }
 
 /* Prints thread statistics. */
@@ -238,6 +270,33 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
 
   return tid;
+}
+
+/* Puts current thread to sleep, with alarm clock method.
+   Sets thread's tick as given tick, and push into sleep list,
+   then call thread_block(). */
+void
+thread_sleep (int64_t ticks)
+{
+  struct thread *cur;
+  enum intr_level old_level;
+
+  /* Turn off interrupts for calling thread_block(). */
+  old_level = intr_disable();
+
+  cur = thread_current();
+
+  /* Set tick for current thread. */
+  cur->tick = ticks;
+
+  /* Update wakeup_tick if given tick is smaller than this. */
+  wakeup_tick = wakeup_tick > ticks ? ticks : wakeup_tick;
+
+  /* Add to sleep queue. */
+  list_push_back(&sleep_list, &cur->elem);
+  thread_block();
+
+  intr_set_level(old_level);
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled

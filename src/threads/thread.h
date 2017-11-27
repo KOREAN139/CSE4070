@@ -108,6 +108,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+#endif
 
 	/* Added for project 1. */
     int exit_status;                    /* Stores exit status. */
@@ -126,10 +127,8 @@ struct thread
 	/* up : Good to be terminated.
 	   down : After being loaded, wait for being excuted. */
 	struct semaphore exec;              /* For synchronization. */
-#endif
 
 	/* Added for project 2. */
-	
 	int fd;                             /* Stores fd, 
 										   next file will get fd+1 for fd. */
 
@@ -137,6 +136,10 @@ struct thread
 
 	struct file *curFile;               /* For denying write on file which
 										   this thread opens. */
+
+	/* Added for project 1(Thread). */
+	int64_t tick;                      /* Store tick,
+										   when thread needs to wake up. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -156,6 +159,7 @@ void thread_print_stats (void);
 typedef void thread_func (void *aux);
 tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
+void thread_sleep (int64_t ticks);
 void thread_block (void);
 void thread_unblock (struct thread *);
 
