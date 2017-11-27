@@ -25,6 +25,10 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/* Project 1, for distinguish integer from real. */
+typedef int32_t fixpoint;
+#define FP (1 << 14)
+
 /* File. */
 struct fileEntry
   {
@@ -141,6 +145,8 @@ struct thread
 	int64_t tick;                       /* Stores tick,
 						   				   when thread needs to wake up. */
 	int nice;                           /* Stores niceness of this thread. */
+	fixpoint recent_cpu;                /* Stores amount of CPU time this
+										   thread has recieved recently. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -184,7 +190,9 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 bool priority_comp (const struct list_elem *a, 
-                    const struct list_elem *b, void *aux);
+                    const struct list_elem *b, void *aux UNUSED);
 bool tick_comp (const struct list_elem *a, 
-	           const struct list_elem *b, void *aux);
+	           const struct list_elem *b, void *aux UNUSED);
+void recent_cpu_update (struct thread *t, void *aux);
+void priority_update (struct thread *t, void *aux UNUSED);
 #endif /* threads/thread.h */

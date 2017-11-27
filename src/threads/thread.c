@@ -59,6 +59,9 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 static int64_t wakeup_tick;     /* Closest tick that some threads
 								   in sleep_list need to wake up. */
 
+static fixpoint load_avg;       /* Stores avg. # of threads ready to run
+								   over the past minute. */
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -104,6 +107,9 @@ thread_init (void)
   /* Initialize wake up tick for alarm clock. */
   wakeup_tick = INT64_MAX;
 
+  /* Initialize load_avg for 4.4BSD Scheduler. */
+  load_avg = 0;
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -112,11 +118,7 @@ thread_init (void)
 
   /* Set up part of thread structure for the running thread,
 	 which added by Sanggu. */
-  list_init(&initial_thread->childList);
   initial_thread->parent = NULL;
-  sema_init(&initial_thread->wait, 0);
-  sema_init(&initial_thread->load, 0);
-  sema_init(&initial_thread->exec, 0);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -180,6 +182,41 @@ thread_tick (void)
 	/* Update wakeup_tick. */
 	wakeup_tick = list_empty(&sleep_list) ? INT64_MAX : 
 	  list_entry(list_front(&sleep_list), struct thread, elem)->tick;
+  }
+
+  if(thread_mlfqs){
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+	/* If current thread is not idle thread, running
+	   thread's recent_cpu is incremented by 1. */
+    t->recent_cpu += (1 & (t != idle_thread)) * FP;
+
+	/* Every second, update every thread's recent_cpu
+	   and load_avg. */
+	if(timer_ticks() % TIMER_FREQ == 0){
+	  fixpoint upd;
+
+	  /* Update load_avg. */
+	  load_avg = 59 * load_avg + 
+		(list_size(&ready_list) + (thread_current() != idle_thread)) * FP;
+	  load_avg = load_avg / 60;
+
+	  /* Calculate (2*load_avg)/(2*load_avg+1) part to
+		 avoid executing same operation over threads. */
+	  upd = ((int64_t)(2 * load_avg) * FP / (2 * load_avg + 1 * FP));
+
+	  /* Update thread's recent_cpu. */
+	  thread_foreach(recent_cpu_update, (void *)&upd);
+	}
+
+	/* Every four ticks, update every thread's priority. */
+	if(timer_ticks() % TIME_SLICE == 0){
+	  thread_foreach(priority_update, NULL);
+	  list_sort(&ready_list, priority_comp, NULL);
+	}
+
+	intr_set_level(old_level);
   }
 }
 
@@ -261,9 +298,9 @@ thread_create (const char *name, int priority,
 	return TID_ERROR;
   }
 
-  /* Initialize thread's fd. 
-     Since 0, 1 are reserved, it starts with 2. */
-  t->fd = 2;
+  /* Set thread's niceness and recent_cpu as parent's. */
+  t->nice = t->parent->nice;
+  t->recent_cpu = t->parent->recent_cpu;
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -458,9 +495,10 @@ void
 thread_set_nice (int nice) 
 {
   struct thread *cur = thread_current();
+
+  /* Update nice, then recalculate priority. */
   cur->nice = nice;
-  cur->priority = PRI_MAX - (thread_get_recent_cpu() >> 2)
-	              - (nice << 1);
+  priority_update(cur, NULL);
 
   /* If current thread no longer has the highest
 	 priority, yields. */
@@ -480,16 +518,18 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  fixpoint ret = load_avg * 100;
+  return ret & (1 << 31) ? ((ret - FP / 2) / FP) 
+	                       : ((ret + FP / 2) / FP);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  fixpoint ret = thread_current()->recent_cpu * 100;
+  return ret & (1 << 31) ? ((ret - FP / 2) / FP) 
+	                       : ((ret + FP / 2) / FP);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -589,6 +629,13 @@ init_thread (struct thread *t, const char *name, int priority)
 
   /* Initialize thread's file. */
   t->curFile = NULL;
+
+  /* Initialize thread's fd. 
+     Since 0, 1 are reserved, it starts with 2. */
+  t->fd = 2;
+
+  /* Initialize thread's niceness and recent_cpu. */
+  t->nice = t->recent_cpu = 0;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
@@ -710,7 +757,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
    false if a's priority is equal or less than b's. */
 bool
 priority_comp (const struct list_elem *a, 
-	                const struct list_elem *b, void *aux)
+	                const struct list_elem *b, void *aux UNUSED)
 {
   return list_entry(a, struct thread, elem)->priority
 	     > list_entry(b, struct thread, elem)->priority;
@@ -721,8 +768,35 @@ priority_comp (const struct list_elem *a,
    false if a's tick is equal or greater than b's. */
 bool
 tick_comp (const struct list_elem *a, 
-	       const struct list_elem *b, void *aux)
+	       const struct list_elem *b, void *aux UNUSED)
 {
   return list_entry(a, struct thread, elem)->tick
 	     < list_entry(b, struct thread, elem)->tick;
+}
+
+/* To update recent_cpu every second, calculate new
+   value and assign into thread's recent_cpu.
+   To use thread_foreach(), this func forms like this. */
+void
+recent_cpu_update (struct thread *t, void *aux)
+{
+  fixpoint upd = *(fixpoint *)aux;
+  t->recent_cpu = ((int64_t)upd * t->recent_cpu / FP) 
+	              + t->nice * FP;
+}
+
+/* To update priority on each four ticks, calculate new
+   value and assign into thread's recent_cpu.
+   To use thread_foreach(), this func forms like this. */
+void
+priority_update (struct thread *t, void *aux UNUSED)
+{
+  /* Stores current thread's recent cpu value
+	 with nearest integer value. */
+  int recent_cpu_int = t->recent_cpu & (1 << 31) ?
+	(t->recent_cpu - FP / 2) / FP 
+	: (t->recent_cpu + FP / 2) / FP;
+
+  int upd = PRI_MAX - recent_cpu_int / 4 - t->nice * 2;
+  t->priority = upd > PRI_MAX ? PRI_MAX : upd < PRI_MIN ? PRI_MIN : upd;
 }
