@@ -4,7 +4,11 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "synch.h"
+#include "threads/synch.h"
+
+#ifndef USERPROG
+extern bool thread_prior_aging;
+#endif
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -195,4 +199,5 @@ bool tick_comp (const struct list_elem *a,
 	           const struct list_elem *b, void *aux UNUSED);
 void recent_cpu_update (struct thread *t, void *aux);
 void priority_update (struct thread *t, void *aux UNUSED);
+void thread_aging (void);
 #endif /* threads/thread.h */

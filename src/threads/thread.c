@@ -62,6 +62,10 @@ static int64_t wakeup_tick;     /* Closest tick that some threads
 static fixpoint load_avg;       /* Stores avg. # of threads ready to run
 								   over the past minute. */
 
+#ifndef USERPROG
+bool thread_prior_aging;
+#endif
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -183,6 +187,9 @@ thread_tick (void)
 	wakeup_tick = list_empty(&sleep_list) ? INT64_MAX : 
 	  list_entry(list_front(&sleep_list), struct thread, elem)->tick;
   }
+
+  if (thread_prior_aging == true)
+	thread_aging();
 
   if(thread_mlfqs){
 	enum intr_level old_level;
@@ -375,7 +382,8 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   //list_push_back (&ready_list, &t->elem);
-  list_insert_ordered(&ready_list, &t->elem, priority_comp, NULL);
+  if(t != idle_thread)
+	list_insert_ordered(&ready_list, &t->elem, priority_comp, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -799,4 +807,18 @@ priority_update (struct thread *t, void *aux UNUSED)
 
   int upd = PRI_MAX - recent_cpu_int / 4 - t->nice * 2;
   t->priority = upd > PRI_MAX ? PRI_MAX : upd < PRI_MIN ? PRI_MIN : upd;
+}
+
+/* Implements thread aging.
+   For every threads in ready_list, increase priority. */
+void
+thread_aging (void)
+{
+  struct list_elem *e;
+  for(e = list_begin(&ready_list);
+	  e != list_end(&ready_list); e = list_next(e))
+  {
+	struct thread *cur = list_entry(e, struct thread, elem);
+	if(cur->priority != PRI_MAX) cur->priority += 1;
+  }
 }
