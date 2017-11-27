@@ -271,7 +271,7 @@ thread_create (const char *name, int priority,
 
   /* If current thread no longer has the highest
 	 priority, yields. */
-  if(priority_less_func(list_begin(&ready_list),
+  if(priority_comp(list_begin(&ready_list),
 		&thread_current()->elem, NULL))
 	thread_yield();
   
@@ -339,7 +339,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   //list_push_back (&ready_list, &t->elem);
-  list_insert_ordered(&ready_list, &t->elem, priority_less_func, NULL);
+  list_insert_ordered(&ready_list, &t->elem, priority_comp, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -411,7 +411,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
     //list_push_back (&ready_list, &cur->elem);
-	list_insert_ordered (&ready_list, &cur->elem, priority_less_func, NULL);
+	list_insert_ordered (&ready_list, &cur->elem, priority_comp, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -442,7 +442,7 @@ thread_set_priority (int new_priority)
   
   /* If current thread no longer has the highest
 	 priority, yields. */
-  if(priority_less_func(list_begin(&ready_list),
+  if(priority_comp(list_begin(&ready_list),
 		&thread_current()->elem, NULL))
 	thread_yield();
 }
@@ -702,7 +702,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
    true if a's priority is greater than b's,
    false if a's priority is equal or less than b's. */
 bool
-priority_less_func (const struct list_elem *a, 
+priority_comp (const struct list_elem *a, 
 	                const struct list_elem *b, void *aux)
 {
   return list_entry(a, struct thread, elem)->priority
