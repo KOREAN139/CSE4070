@@ -138,8 +138,9 @@ struct thread
 										   this thread opens. */
 
 	/* Added for project 1(Thread). */
-	int64_t tick;                       /* Store tick,
+	int64_t tick;                       /* Stores tick,
 						   				   when thread needs to wake up. */
+	int nice;                           /* Stores niceness of this thread. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -184,4 +185,6 @@ int thread_get_load_avg (void);
 
 bool priority_comp (const struct list_elem *a, 
                     const struct list_elem *b, void *aux);
+bool tick_comp (const struct list_elem *a, 
+	           const struct list_elem *b, void *aux);
 #endif /* threads/thread.h */

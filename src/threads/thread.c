@@ -160,27 +160,26 @@ thread_tick (void)
 
   /* Wake up blocked thread, if any thread need to be. */
   if(curr_t >= wakeup_tick){
-
-	/* Initialize wakeup_tick to set new value through loop. */
-	wakeup_tick = INT64_MAX;
-
-	/* Loop through sleep list, and add to ready queue when
-	   thread's tick is less than curr_t. */ 
-	struct list_elem *e = list_begin(&sleep_list);
-	while(e != list_end(&sleep_list)){
+	do{
+	  /* Get blocked thread which has lowest tick in
+		 sleep_list. */
+	  struct list_elem *e = list_front(&sleep_list);
 	  struct thread *cur = list_entry(e, struct thread, elem);
 
-	  if(cur->tick <= curr_t){
-		/* Remove from sleep list and add to ready queue. */
-		e = list_remove(e);
-		thread_unblock(cur);
-	  } else{
-		/* Update wakeup_tick if necessary. */
-		wakeup_tick = wakeup_tick > cur->tick ? cur->tick : wakeup_tick;
-		e = list_next(e);
-	  }
+	  /* Loop must be stopped when lowest tick in sleep_list
+		 if greater then current tick. */
+	  if(cur->tick > wakeup_tick) break;
 
-	}
+	  /* Remove from sleep list and add to ready queue. */
+	  list_pop_front(&sleep_list);
+      thread_unblock(cur);
+
+	  /* Loop must be stopped when list is empty. */
+	} while(!list_empty(&sleep_list));
+
+	/* Update wakeup_tick. */
+	wakeup_tick = list_empty(&sleep_list) ? INT64_MAX : 
+	  list_entry(list_front(&sleep_list), struct thread, elem)->tick;
   }
 }
 
@@ -272,7 +271,7 @@ thread_create (const char *name, int priority,
   /* If current thread no longer has the highest
 	 priority, yields. */
   if(priority_comp(list_begin(&ready_list),
-		&thread_current()->elem, NULL))
+		           &thread_current()->elem, NULL))
 	thread_yield();
   
   return tid;
@@ -299,7 +298,7 @@ thread_sleep (int64_t ticks)
   wakeup_tick = wakeup_tick > ticks ? ticks : wakeup_tick;
 
   /* Add to sleep queue. */
-  list_push_back(&sleep_list, &cur->elem);
+  list_insert_ordered(&sleep_list, &cur->elem, tick_comp, NULL);
   thread_block();
 
   intr_set_level(old_level);
@@ -443,7 +442,7 @@ thread_set_priority (int new_priority)
   /* If current thread no longer has the highest
 	 priority, yields. */
   if(priority_comp(list_begin(&ready_list),
-		&thread_current()->elem, NULL))
+		           &thread_current()->elem, NULL))
 	thread_yield();
 }
 
@@ -456,17 +455,25 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  struct thread *cur = thread_current();
+  cur->nice = nice;
+  cur->priority = PRI_MAX - (thread_get_recent_cpu() >> 2)
+	              - (nice << 1);
+
+  /* If current thread no longer has the highest
+	 priority, yields. */
+  if(priority_comp(list_begin(&ready_list),
+		           &thread_current()->elem, NULL))
+	thread_yield();
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -707,4 +714,15 @@ priority_comp (const struct list_elem *a,
 {
   return list_entry(a, struct thread, elem)->priority
 	     > list_entry(b, struct thread, elem)->priority;
+}
+
+/* For using list_insert_ordered(), this func returns
+   true if a's tick is less than b's,
+   false if a's tick is equal or greater than b's. */
+bool
+tick_comp (const struct list_elem *a, 
+	       const struct list_elem *b, void *aux)
+{
+  return list_entry(a, struct thread, elem)->tick
+	     < list_entry(b, struct thread, elem)->tick;
 }
