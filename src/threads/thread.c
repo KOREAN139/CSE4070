@@ -188,8 +188,10 @@ thread_tick (void)
 	  list_entry(list_front(&sleep_list), struct thread, elem)->tick;
   }
 
+#ifndef USERPROG
   if (thread_prior_aging == true)
 	thread_aging();
+#endif
 
   if(thread_mlfqs){
 	enum intr_level old_level;
@@ -809,6 +811,7 @@ priority_update (struct thread *t, void *aux UNUSED)
   t->priority = upd > PRI_MAX ? PRI_MAX : upd < PRI_MIN ? PRI_MIN : upd;
 }
 
+#ifndef USERPROG
 /* Implements thread aging.
    For every threads in ready_list, increase priority. */
 void
@@ -822,3 +825,4 @@ thread_aging (void)
 	if(cur->priority != PRI_MAX) cur->priority += 1;
   }
 }
+#endif
