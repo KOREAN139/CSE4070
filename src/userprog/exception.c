@@ -188,6 +188,12 @@ page_fault (struct intr_frame *f)
 	pgs = pgs / PGSIZE - 1;
 
 	for(i = 0; pgs--; i+=PGSIZE){
+	  /* When current page already exists. */
+	  if(pagedir_get_page(
+			thread_current()->pagedir, 
+			pg_round_down(fault_addr) + i
+			)) continue;
+
 	  /* For get new page's physical addr. */
 	  void *new = palloc_get_page(PAL_USER | PAL_ZERO);
 
