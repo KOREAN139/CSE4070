@@ -4,6 +4,9 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "userprog/syscall.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -148,28 +151,82 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* When page fault occurs in kernel. 
-     ( To use get_user in syscall.c ) */
-  if(!user){
-	/* Copies eax value into eip. */
-	f->eip = (void (*)(void))f->eax;
-	/* Sets eax to 0xffffffff. */
-	f->eax = 0xffffffff;
-	//return;
-  }
-
-  syscall_exit(-1);
-
-  thread_exit();
-
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
+/*
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
+*/
+
+#if VM
+  /* When trying to write on read-only page,
+	 or read at non-present page. */
+  if(!not_present || (not_present && !write))
+	goto VIOLATION;
+
+  /* Grow stack size if it's possible. */
+  /* When given fault_addr is invalid. */
+  if(!fault_addr || !is_user_vaddr(fault_addr))
+	goto VIOLATION;
+
+  void *esp = user ? f->esp : thread_current()->esp;
+
+  /* Distinguish stack access from other access.
+	 4(bytes) came from PUSH, 32(bytes) came from PUSHA. */
+  if(esp <= fault_addr || fault_addr == esp - 4 || fault_addr == esp - 32){
+	size_t i;
+
+	/* Calculate stack size. */
+	size_t pgs = (size_t)(PHYS_BASE - pg_round_down(fault_addr));
+
+	/* When it exceeds maximum stack size, 8MB. */
+	if(pgs > (1 << 23))
+	  goto VIOLATION;
+
+	/* Calculate how many pages are required */
+	pgs = pgs / PGSIZE - 1;
+
+	for(i = 0; pgs--; i+=PGSIZE){
+	  /* For get new page's physical addr. */
+	  void *new = palloc_get_page(PAL_USER | PAL_ZERO);
+
+	  /* When failed to get new page or failed to map.*/
+	  if(!new || !pagedir_set_page(thread_current()->pagedir, 
+			pg_round_down(fault_addr) + i, new, true))
+		goto VIOLATION;
+	}
+  }
+
+  return;
+
+VIOLATION:
+#endif
+
+  /* When page fault occurs in kernel. 
+     ( To use get_user in syscall.c ) */
+  if(!user){
+	/* Copies eax value into eip. */
+	f->eip = (void (*)(void))f->eax;
+
+	/* Sets eax to 0xffffffff. */
+	f->eax = 0xffffffff;
+  }
+
+  syscall_exit(-1);
+
+  // thread_exit();
+
+  /* To implement virtual memory, delete the rest of the function
+     body, and replace it with code that brings in the page to
+     which fault_addr refers. */
+  /*
+  printf ("Page fault at %p: %s error %s page in %s context.\n",
+          fault_addr,
+          not_present ? "not present" : "rights violation",
+          write ? "writing" : "reading",
+          user ? "user" : "kernel");
+  */
   kill (f);
 }
 

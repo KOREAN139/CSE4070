@@ -18,6 +18,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/page.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -79,6 +80,9 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  /* Initialize supplemental page table. */
+  // init_supPT(&thread_current()->supPT);
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -122,7 +126,6 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) 
 {
-  int exit_status;
   struct thread *cur = thread_current();
   struct thread *t;
   struct list_elem *e;
@@ -289,7 +292,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Store pointers that points each argument.
 	 args[i] = i-th argumnet, args[argc] = NULL. */
-  for(str = fn_copy; args[++argc] = strtok_r(str, " ", &svptr); str = NULL);
+  for(str = fn_copy; (args[++argc] = strtok_r(str, " ", &svptr)); str = NULL);
 
   /* Open executable file. */
   lock_acquire(&fLock);

@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 #include "threads/synch.h"
 
@@ -151,6 +152,9 @@ struct thread
 	int nice;                           /* Stores niceness of this thread. */
 	fixpoint recent_cpu;                /* Stores amount of CPU time this
 										   thread has recieved recently. */
+	/* Added for project 3. */
+	uint8_t *esp;						/* Store current stack pointer. */
+	struct hash supPT;				    /* Supplemental page table. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

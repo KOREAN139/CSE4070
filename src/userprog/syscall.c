@@ -72,6 +72,10 @@ syscall_handler (struct intr_frame *f UNUSED)
   /* Get system call number. */ 
   int sysnum = (int)readWord((const void *)f->esp);
 
+  /* Save esp into thread on initial transition
+	 from user to kernel. (pintos document 4.3.3) */
+  thread_current()->esp = f->esp;
+
   /* Do syscall here. */
   switch(sysnum) {
 	/* Project 1. */
